@@ -11,9 +11,9 @@ from datetime import datetime
 import time
 
 # --- 1. CẤU HÌNH ---
-st.set_page_config(page_title="Misa Finance V78", page_icon="🛡️", layout="centered")
+st.set_page_config(page_title="Misa Finance V79", page_icon="🛡️", layout="centered")
 
-# 🔥 SỬA API KEY & EMAIL CỦA BẠN VÀO ĐÂY 🔥
+# 🔥 ĐIỀN API VÀ EMAIL CỦA BẠN VÀO ĐÂY 🔥
 GEMINI_API_KEY = "AIzaSyBE8SwSVUvxywD-LhUAhd_rsm2mNjs0L3I" 
 EMAIL_HOST_USER = "quynakroth2304@gmail.com"
 EMAIL_HOST_PASSWORD = "spem mabh baxv eqyl" 
@@ -41,7 +41,7 @@ def send_backup(target_email, reason):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_HOST_USER; msg['To'] = target_email
-        msg['Subject'] = f"BACKUP V78: {reason}"
+        msg['Subject'] = f"BACKUP V79: {reason}"
         msg.attach(MIMEText("Data backup.", 'plain'))
         with open(DB_FILE, "rb") as f:
             p = MIMEBase('application', 'octet-stream'); p.set_payload(f.read())
@@ -51,12 +51,11 @@ def send_backup(target_email, reason):
         s.login(EMAIL_HOST_USER, EMAIL_HOST_PASSWORD); s.sendmail(EMAIL_HOST_USER, target_email, msg.as_string()); s.quit()
     except: pass
 
-# --- 4. HÀM AI (ĐÃ SỬA LỖI 404) ---
+# --- 4. HÀM AI ---
 def get_ai_advice(amount, category, note, persona, total_asset):
     if "SỬA_" in GEMINI_API_KEY or not GEMINI_API_KEY: return "Chưa nhập API Key! 🤖"
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # SỬA LỖI: Dùng 'gemini-pro' thay vì 'gemini-1.5-flash' để tránh lỗi 404
         model = genai.GenerativeModel('gemini-pro')
         
         prompts = {
@@ -112,7 +111,7 @@ if 'user' not in st.session_state: st.session_state.user = None
 if not st.session_state.user:
     c1, c2, c3 = st.columns([1, 4, 1])
     with c2:
-        st.markdown("<h1 style='text-align:center; color:#6c5ce7'>MISA ASSET V78</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align:center; color:#6c5ce7'>MISA ASSET V79</h1>", unsafe_allow_html=True)
         tab1, tab2, tab3 = st.tabs(["ĐĂNG NHẬP", "TẠO TÀI KHOẢN", "KHÔI PHỤC"])
         
         with tab1:
@@ -161,15 +160,19 @@ else:
     # 1. Lấy danh sách ví
     accounts = pd.read_sql("SELECT * FROM accounts WHERE username=?", conn, params=(me,))
     
-    # 🔥 SỬA LỖI SẬP WEB: Nếu chưa có ví -> Tự tạo ví mặc định
+    # 🔥 FIX AUTO HEAL: Tạo ví nếu trống
     if accounts.empty:
         conn.execute("INSERT INTO accounts (username, name, type, balance) VALUES (?,?,?,?)", (me, "Tiền mặt", "cash", 0))
         conn.commit()
-        # Load lại dữ liệu ngay lập tức
         accounts = pd.read_sql("SELECT * FROM accounts WHERE username=?", conn, params=(me,))
-        st.toast("⚠️ Đã tự khởi tạo ví Tiền mặt (0đ) để tránh lỗi!")
+    
+    # 🔥🔥 QUAN TRỌNG: FIX LỖI TYPE ERROR (Ép kiểu dữ liệu thành số) 🔥🔥
+    # Dòng này sẽ đảm bảo balance luôn là số, nếu lỗi thì biến thành 0
+    accounts['balance'] = pd.to_numeric(accounts['balance'], errors='coerce').fillna(0)
 
+    # Giờ tính tổng thoải mái không sợ lỗi
     total_asset = accounts['balance'].sum()
+    
     history = pd.read_sql("SELECT * FROM transactions WHERE username=? ORDER BY id DESC LIMIT 10", conn, params=(me,))
     conn.close()
 
@@ -189,7 +192,7 @@ else:
         if st.button("Đăng xuất"): st.session_state.user = None; st.rerun()
 
     # HEADER & AI
-    if 'ai_msg' not in st.session_state: st.session_state.ai_msg = f"Chào {st.session_state.name}! Tài sản: {total_asset:,}đ 🤑"
+    if 'ai_msg' not in st.session_state: st.session_state.ai_msg = f"Chào {st.session_state.name}! Tài sản: {total_asset:,.0f}đ 🤑"
     
     st.markdown(f"""
     <div style="text-align:center; margin-bottom:20px">
@@ -208,11 +211,10 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # WALLET LIST (ĐÃ FIX LỖI ST.COLUMNS)
+    # WALLET LIST
     st.markdown("**💳 Ví của bạn:**")
     
     if not accounts.empty:
-        # Giới hạn tối đa 3 cột để không vỡ giao diện
         num_cols = min(len(accounts), 3)
         cols = st.columns(num_cols)
         
@@ -221,11 +223,13 @@ else:
             with cols[col_idx]:
                 tk_type = "cash" if row['type'] == 'cash' else "bank"
                 icon = "💵" if row['type'] == 'cash' else "🏦"
+                # Ép kiểu lại lần nữa cho chắc khi hiển thị
+                bal_display = int(row['balance'])
                 st.markdown(f"""
                 <div class="bank-card {tk_type}">
                     <div style="font-size:20px">{icon}</div>
                     <div style="font-weight:bold; font-size:13px">{row['name']}</div>
-                    <div style="font-size:15px; font-weight:800; margin-top:5px">{row['balance']:,}</div>
+                    <div style="font-size:15px; font-weight:800; margin-top:5px">{bal_display:,}</div>
                 </div>
                 """, unsafe_allow_html=True)
     else:
@@ -248,8 +252,11 @@ else:
             if st.form_submit_button("LƯU GIAO DỊCH"):
                 if t_amt > 0 and acc_names:
                     conn = sqlite3.connect(DB_FILE)
-                    curr_bal = accounts[accounts['name']==t_acc]['balance'].values[0]
+                    
+                    # Lấy số dư hiện tại và ép kiểu số
+                    curr_bal = int(accounts[accounts['name']==t_acc]['balance'].values[0])
                     new_bal = curr_bal - t_amt if t_type == "Chi tiền" else curr_bal + t_amt
+                    
                     conn.execute("UPDATE accounts SET balance=? WHERE username=? AND name=?", (new_bal, me, t_acc))
                     conn.execute("INSERT INTO transactions (username, account_name, date, type, amount, category, note, ai_comment) VALUES (?,?,?,?,?,?,?,?)",
                                 (me, t_acc, datetime.now().strftime('%Y-%m-%d %H:%M'), t_type, t_amt, t_cat, t_note, ""))
