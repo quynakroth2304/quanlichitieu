@@ -3,138 +3,128 @@ import pandas as pd
 import sqlite3
 import google.generativeai as genai
 from datetime import datetime
-import time
 
-# --- CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Misa AI Money", page_icon="🐷", layout="centered")
+# --- CẤU HÌNH ---
+st.set_page_config(page_title="Misa AI Money Pro", page_icon="💸", layout="centered")
 
-# 🔥 NHẬP GEMINI API KEY CỦA BẠN VÀO ĐÂY 🔥
-GEMINI_API_KEY = ""  
+# 🔥 NHẬP API KEY CỦA BẠN VÀO ĐÂY 🔥
+GEMINI_API_KEY = "AIzaSyAaviiakNYZURaRLBEskwzhV4zqOmeO4n8" 
 
 # --- DATABASE ---
-DB_FILE = "finance_v71.db"
-
+DB_FILE = "finance_v73.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT,
-        type TEXT,
-        amount INTEGER,
-        category TEXT,
-        note TEXT
+        id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, type TEXT, amount INTEGER, category TEXT, note TEXT
     )''')
     conn.commit(); conn.close()
-
 init_db()
 
-# --- CSS MAGIC (TẠO GIAO DIỆN GIỐNG ẢNH) ---
+# --- CSS MAGIC (LEVEL UP: GLASSMORPHISM & ANIMATIONS) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
     
-    /* Reset nền */
-    .stApp { background-color: #f5f7fa; font-family: 'Nunito', sans-serif; }
-    [data-testid="stHeader"] { background-color: rgba(0,0,0,0); }
+    /* 1. NỀN & FONT */
+    .stApp { 
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        font-family: 'Poppins', sans-serif; 
+    }
+    [data-testid="stHeader"] { display: none; }
     
-    /* Ẩn các thành phần thừa */
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
+    /* 2. HIỆU ỨNG ĐỘNG (ANIMATIONS) */
+    @keyframes float { 0% {transform: translateY(0px);} 50% {transform: translateY(-15px);} 100% {transform: translateY(0px);} }
+    @keyframes slideUp { from {opacity: 0; transform: translateY(20px);} to {opacity: 1; transform: translateY(0);} }
+    @keyframes pulse { 0% {transform: scale(1);} 50% {transform: scale(1.05);} 100% {transform: scale(1);} }
     
-    /* HEADER BUTTONS */
-    .top-btn {
-        background: #fff; border-radius: 20px; padding: 8px 15px; 
-        font-weight: bold; color: #555; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        display: inline-block; margin-right: 10px; font-size: 14px;
+    /* 3. MASCOT ROBOT */
+    .mascot-area {
+        text-align: center; padding: 20px 0;
+        animation: slideUp 0.8s ease-out;
     }
-    .icon-gold { color: #ffbf00; }
-    .icon-blue { color: #0084ff; }
-
-    /* MASCOT AREA */
-    .mascot-container { text-align: center; margin-top: 20px; margin-bottom: 10px; position: relative; }
-    .robot-img { width: 120px; animation: float 3s ease-in-out infinite; }
+    .robot-img { 
+        width: 140px; 
+        filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+        animation: float 4s ease-in-out infinite; 
+    }
     
-    @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
+    /* 4. BONG BÓNG CHAT (iMESSAGE STYLE) */
+    .chat-bubble {
+        background: white; border-radius: 20px; padding: 15px 20px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        display: inline-block; max-width: 90%;
+        font-size: 14px; color: #444; font-weight: 600;
+        position: relative; margin-bottom: 15px;
+        border-bottom-left-radius: 2px;
     }
-
-    /* SPEECH BUBBLE (Lời thoại robot) */
-    .speech-bubble {
-        position: relative; background: #fff; border-radius: 15px;
-        padding: 10px 15px; display: inline-block; max-width: 80%;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 10px;
-        font-size: 14px; color: #333; border: 1px solid #eee;
-    }
-    .speech-bubble:after {
-        content: ''; position: absolute; bottom: -10px; left: 50%;
-        border-width: 10px 10px 0; border-style: solid;
-        border-color: #fff transparent; display: block; width: 0;
-        margin-left: -10px;
-    }
-
-    /* MAIN ACTION CARDS */
-    .action-card {
-        background: white; border-radius: 20px; padding: 20px; text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 120px;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        border: 1px solid #eee; cursor: pointer; transition: 0.3s;
-    }
-    .action-card:hover { transform: scale(1.02); }
-    .big-num { font-size: 20px; font-weight: 800; color: #333; margin-top: 5px; }
-    .sub-text { font-size: 13px; color: #888; font-weight: 600; }
-    .add-icon { font-size: 30px; color: #888; }
-
-    /* GRADIENT SUMMARY CARD (THAY ĐỔI RÒNG) */
-    .gradient-card {
-        background: linear-gradient(135deg, #e0f7fa 0%, #e8f5e9 100%);
-        border-radius: 20px; padding: 20px; margin-top: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #b2dfdb;
-    }
-    .grad-title { font-size: 16px; font-weight: bold; color: #004d40; margin-bottom: 5px; }
-    .grad-total { font-size: 28px; font-weight: 800; color: #004d40; margin-bottom: 15px; }
     
-    .stat-row { display: flex; justify-content: space-between; }
-    .stat-box { 
-        background: rgba(255,255,255,0.6); padding: 10px 20px; border-radius: 12px; 
-        width: 48%; text-align: center;
+    /* 5. THẺ CARD (GLASSMORPHISM) */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        padding: 20px;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        margin-bottom: 20px;
+        animation: slideUp 1s ease-out;
     }
-    .income-txt { color: #42b72a; font-weight: 800; font-size: 16px; }
-    .expense-txt { color: #ff4d4d; font-weight: 800; font-size: 16px; }
-    .label-stat { font-size: 12px; color: #555; }
-
-    /* FORM STYLING */
-    div[data-testid="stForm"] { background: white; padding: 20px; border-radius: 20px; border: 1px solid #eee; }
+    
+    /* 6. SỐ LIỆU & TEXT */
+    .label-text { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+    .money-text { font-size: 26px; font-weight: 800; color: #2d3436; margin: 5px 0; }
+    .net-money { 
+        font-size: 38px; font-weight: 800; 
+        background: linear-gradient(45deg, #00b09b, #96c93d);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: pulse 3s infinite;
+    }
+    .expense-money { color: #ff6b6b; }
+    
+    /* 7. FORM & BUTTON */
     .stTextInput input, .stNumberInput input, .stSelectbox div {
-        border-radius: 10px !important; border: 1px solid #eee !important;
+        border-radius: 16px !important; border: none !important;
+        background: #f1f2f6 !important; padding: 10px 15px !important;
     }
     .stButton button {
-        background-color: #333 !important; color: white !important; border-radius: 25px !important;
-        width: 100%; padding: 10px !important; font-weight: bold !important;
+        background: linear-gradient(45deg, #6c5ce7, #a29bfe) !important;
+        color: white !important; border: none !important;
+        border-radius: 18px !important; padding: 15px !important;
+        font-weight: 800 !important; letter-spacing: 1px;
+        box-shadow: 0 10px 20px rgba(108, 92, 231, 0.3);
+        transition: 0.3s;
     }
+    .stButton button:hover { transform: translateY(-3px); box-shadow: 0 15px 25px rgba(108, 92, 231, 0.4); }
+
+    /* 8. LỊCH SỬ LIST */
+    .history-item {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 15px 0; border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .cat-icon { width: 40px; height: 40px; background: #dfe6e9; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin-right: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIC AI GEMINI ---
+# --- LOGIC AI ---
 def get_ai_advice(amount, category, note, persona, balance):
-    if not GEMINI_API_KEY: return "Bạn chưa nhập API Key nên mình hổng biết nói gì :("
-    
+    if not GEMINI_API_KEY: return "Nhập API Key vào code đi đại ca ơi! 🤖"
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompts = {
-        "Cục súc": f"Bạn là một con robot tài chính cực kỳ đanh đá, mỏ hỗn. Người dùng vừa tiêu {amount} cho {category} ({note}). Số dư hiện tại là {balance}. Hãy chửi nó vì tiêu hoang hoặc dọa nó sợ. Ngắn gọn thôi.",
-        "Nhẹ nhàng": f"Bạn là con robot tài chính dễ thương, cute (tên Misa). Người dùng vừa tiêu {amount} cho {category} ({note}). Hãy khuyên nhủ nhẹ nhàng, dùng icon đáng yêu. Ngắn gọn.",
-        "Nghiêm túc": f"Phân tích khoản chi: {amount} cho {category}. Đưa ra lời khuyên tài chính ngắn gọn."
+        "Cục súc": f"Bạn là AI quản lý tài chính cục súc, hay chửi thề (nhẹ). User tiêu {amount}đ cho {category} ({note}). Số dư còn {balance}đ. Chửi nó vì nghèo mà hoang. Ngắn gọn (dưới 40 từ).",
+        "Nhẹ nhàng": f"Bạn là em gái mưa tên Misa, cute, icon đáng yêu. User tiêu {amount}đ cho {category} ({note}). Khuyên nhủ nhẹ nhàng. Ngắn gọn.",
+        "Nghiêm túc": f"Phân tích tài chính ngắn gọn: {amount}đ cho {category}. Hợp lý không?"
     }
-    
     try:
         response = model.generate_content(prompts.get(persona, prompts["Nhẹ nhàng"]))
         return response.text
-    except: return "Mạng lag quá, không load được não AI..."
+    except: return "Mạng lag quá, cho Misa nghỉ tí..."
 
-# --- LOGIC XỬ LÝ SỐ LIỆU ---
+# --- XỬ LÝ SỐ LIỆU ---
 conn = sqlite3.connect(DB_FILE)
 df = pd.read_sql("SELECT * FROM transactions", conn)
 conn.close()
@@ -145,106 +135,101 @@ net_change = total_income - total_expense
 
 # --- GIAO DIỆN CHÍNH ---
 
-# 1. HEADER (Giả lập nút bấm như ảnh)
-c1, c2 = st.columns([1,1])
-with c1: st.markdown('<div class="top-btn"><span class="icon-gold">🏆</span> Những cột mốc</div>', unsafe_allow_html=True)
-with c2: st.markdown('<div class="top-btn" style="float:right"><span class="icon-blue">📊</span> Phân tích thêm</div>', unsafe_allow_html=True)
+# 1. SETTINGS (Ẩn trong Sidebar)
+with st.sidebar:
+    st.title("⚙️ Cài đặt")
+    persona = st.radio("Chế độ Bot:", ["Nhẹ nhàng", "Cục súc", "Nghiêm túc"])
+    st.info("Phiên bản V73 - Glass UI")
 
-# 2. MASCOT & AI SPEECH (Phần quan trọng nhất)
-if 'ai_msg' not in st.session_state: st.session_state.ai_msg = "Chào bạn! Hôm nay ví tiền thế nào rồi? 👋"
+# 2. HEADER ROBOT (ĐÃ THÊM HIỆU ỨNG)
+if 'ai_msg' not in st.session_state: st.session_state.ai_msg = "Chào Boss! Hôm nay ví dày hay mỏng đây? 💖"
 
 st.markdown(f"""
-<div class="mascot-container">
-    <div class="speech-bubble">{st.session_state.ai_msg}</div>
+<div class="mascot-area">
+    <div class="chat-bubble">{st.session_state.ai_msg}</div>
     <br>
     <img src="https://cdn-icons-png.flaticon.com/512/4712/4712109.png" class="robot-img">
 </div>
 """, unsafe_allow_html=True)
 
-# 3. SETTINGS NHANH (Sidebar cho gọn)
-with st.sidebar:
-    st.header("Cài đặt Misa AI")
-    persona = st.radio("Tính cách Robot:", ["Nhẹ nhàng", "Cục súc", "Nghiêm túc"])
-    st.info("Nhập API Key trong code để Bot hoạt động nhé!")
+# 3. THẺ TỔNG KẾT (HERO SECTION)
+st.markdown(f"""
+<div class="glass-card" style="text-align:center">
+    <div class="label-text">SỐ DƯ HIỆN TẠI</div>
+    <div class="net-money">{net_change:,.0f}đ</div>
+    <br>
+    <div style="display:flex; justify-content:space-around;">
+        <div>
+            <div class="label-text">THU NHẬP</div>
+            <div style="color:#00b894; font-weight:800; font-size:18px">+{total_income:,.0f}</div>
+        </div>
+        <div style="width:1px; background:#ddd"></div>
+        <div>
+            <div class="label-text">CHI TIÊU</div>
+            <div style="color:#ff7675; font-weight:800; font-size:18px">-{total_expense:,.0f}</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# 4. KHU VỰC THAO TÁC (GRID GIỐNG ẢNH)
-col_left, col_right = st.columns(2)
+# 4. KHU VỰC NHẬP LIỆU (GRID ĐẸP)
+c1, c2 = st.columns([1, 1.5])
 
-with col_left:
-    # Hộp hiển thị Chi Tiêu tháng này
-    st.markdown(f"""
-    <div class="action-card">
-        <div class="sub-text">CHI TIÊU THÁNG NÀY</div>
-        <div class="big-num">{total_expense:,.0f}đ</div>
-        <div style="font-size:10px; color:#aaa">✏️ Chạm để xem</div>
+with c1:
+    st.markdown("""
+    <div class="glass-card" style="height:180px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+        <div style="font-size:40px">📊</div>
+        <div style="font-weight:bold; margin-top:10px; color:#555">Báo cáo<br>Chi tiết</div>
     </div>
     """, unsafe_allow_html=True)
 
-with col_right:
-    # Nút Thêm Giao Dịch (Dùng Popover để không chuyển trang)
-    with st.popover("➕ Thêm GD", use_container_width=True):
-        st.markdown("### Thêm giao dịch mới")
-        with st.form("add_tx"):
-            t_type = st.selectbox("Loại", ["Chi", "Thu"], index=0)
-            t_amt = st.number_input("Số tiền", step=1000, min_value=0)
-            t_cat = st.text_input("Danh mục", "Ăn uống")
-            t_note = st.text_input("Ghi chú", "...")
+with c2:
+    # Nút bấm mở Form (Popover)
+    with st.popover("➕ GHI GIAO DỊCH MỚI", use_container_width=True):
+        st.markdown("### 📝 Nhập thông tin")
+        with st.form("add_tx_v73"):
+            type_tx = st.selectbox("Loại giao dịch", ["Chi", "Thu"])
+            amt_tx = st.number_input("Số tiền", step=5000, min_value=0)
+            cat_tx = st.text_input("Nội dung (VD: Cà phê)", "Ăn uống")
             
-            if st.form_submit_button("Lưu ngay"):
+            if st.form_submit_button("LƯU VÀO SỔ"):
                 conn = sqlite3.connect(DB_FILE)
                 conn.execute("INSERT INTO transactions (date, type, amount, category, note) VALUES (?,?,?,?,?)",
-                            (datetime.now().strftime('%Y-%m-%d'), t_type, t_amt, t_cat, t_note))
+                            (datetime.now().strftime('%Y-%m-%d %H:%M'), type_tx, amt_tx, cat_tx, ""))
                 conn.commit(); conn.close()
                 
-                # Gọi AI trả lời
-                st.session_state.ai_msg = get_ai_advice(t_amt, t_cat, t_note, persona, net_change - t_amt if t_type=='Chi' else net_change + t_amt)
+                # Gọi AI
+                st.session_state.ai_msg = get_ai_advice(amt_tx, cat_tx, "", persona, net_change - amt_tx if type_tx=='Chi' else net_change + amt_tx)
                 st.rerun()
+
+# 5. DANH SÁCH LỊCH SỬ (GIAO DIỆN MOBILE LIST)
+st.markdown("<h3 style='color:#555; margin-top:20px'>🕒 Gần đây</h3>", unsafe_allow_html=True)
+
+if not df.empty:
+    # Lấy 5 gd mới nhất
+    recent = df.sort_index(ascending=False).head(5)
     
-    # Hiển thị text giả lập nút bấm (chỉ để đẹp)
-    st.markdown("""
-    <div style="text-align:center; margin-top:-35px; pointer-events:none; position:relative; z-index:0;">
-        <div class="action-card" style="background:#eee; border:none;">
-            <div class="add-icon">+</div>
-            <div class="sub-text">Ví mới</div>
+    st.markdown('<div class="glass-card" style="padding:10px 20px;">', unsafe_allow_html=True)
+    for index, row in recent.iterrows():
+        icon = "💸" if row['type'] == 'Chi' else "💰"
+        color = "#ff7675" if row['type'] == 'Chi' else "#00b894"
+        sign = "-" if row['type'] == 'Chi' else "+"
+        
+        st.markdown(f"""
+        <div class="history-item">
+            <div style="display:flex; align-items:center">
+                <div class="cat-icon">{icon}</div>
+                <div>
+                    <div style="font-weight:bold; color:#2d3436">{row['category']}</div>
+                    <div style="font-size:11px; color:#aaa">{row['date']}</div>
+                </div>
+            </div>
+            <div style="font-weight:800; color:{color}">{sign}{row['amount']:,}đ</div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.info("Chưa có giao dịch nào. Hãy bấm nút Thêm màu tím ở trên!")
 
-# 5. DATE SELECTOR
-st.markdown("<br>", unsafe_allow_html=True)
-col_d1, col_d2 = st.columns([1, 2])
-with col_d1: st.selectbox("", ["Tháng này", "Tháng trước"], label_visibility="collapsed")
-with col_d2: st.markdown(f"<div style='padding-top:10px; color:#555'>Tháng {datetime.now().month} năm {datetime.now().year}</div>", unsafe_allow_html=True)
-
-# 6. GRADIENT SUMMARY CARD (THAY ĐỔI RÒNG)
-# Logic màu sắc: Âm thì đỏ, Dương thì xanh
-net_color = "#004d40" if net_change >= 0 else "#d32f2f"
-
-st.markdown(f"""
-<div class="gradient-card">
-    <div class="grad-title">Thay đổi ròng</div>
-    <div class="grad-total" style="color:{net_color}">{net_change:,.0f}đ</div>
-    
-    <div class="stat-row">
-        <div class="stat-box">
-            <div class="label-stat">Chi phí ▼</div>
-            <div class="expense-txt">{total_expense:,.0f}đ</div>
-        </div>
-        <div class="stat-box">
-            <div class="label-stat">Thu nhập ▲</div>
-            <div class="income-txt">{total_income:,.0f}đ</div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# 7. BOTTOM NAV (GIẢ LẬP)
-st.markdown("""
-<div style="position:fixed; bottom:0; left:0; width:100%; background:white; padding:15px; border-top:1px solid #eee; display:flex; justify-content:space-around; align-items:center; z-index:999;">
-    <div style="text-align:center; color:#0084ff; font-weight:bold;">🏠<br><span style="font-size:10px">Trang chủ</span></div>
-    <div style="text-align:center; color:#ccc;">💸<br><span style="font-size:10px">Sổ GD</span></div>
-    <div style="text-align:center; color:#ccc;">📊<br><span style="font-size:10px">Báo cáo</span></div>
-    <div style="text-align:center; color:#ccc;">👤<br><span style="font-size:10px">Tài khoản</span></div>
-</div>
-<br><br><br>
-""", unsafe_allow_html=True)
+# 6. FOOTER DECORATION
+st.markdown("<br><br><div style='text-align:center; color:#ccc; font-size:12px'>Misa AI Money V73</div>", unsafe_allow_html=True)
