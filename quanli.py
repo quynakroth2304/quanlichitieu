@@ -19,7 +19,7 @@ EMAIL_HOST_USER = "quynakroth2304@gmail.com"
 EMAIL_HOST_PASSWORD = "spem mabh baxv eqyl" 
 
 # --- 2. DATABASE ---
-DB_FILE = "finance_v78.db"
+DB_FILE = "finance_v81.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
